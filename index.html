@@ -1,0 +1,333 @@
+
+<div style="display:flex;flex-direction:column;gap:12px;padding:1rem 0;">
+
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button id="startBtn" onclick="startCamera()" style="background:var(--color-background-info);color:var(--color-text-info);border:none;padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;font-weight:500;cursor:pointer;">Start Camera</button>
+    <button onclick="clearCanvas()" style="padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;">Clear</button>
+    <button onclick="recognizeText()" style="padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;">Recognize with AI ↗</button>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:13px;color:var(--color-text-secondary);">Hand 1:</span>
+      <input type="color" id="color1" value="#6366f1" style="width:28px;height:28px;border:none;border-radius:50%;cursor:pointer;padding:0;">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:13px;color:var(--color-text-secondary);">Hand 2:</span>
+      <input type="color" id="color2" value="#f43f5e" style="width:28px;height:28px;border:none;border-radius:50%;cursor:pointer;padding:0;">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:13px;color:var(--color-text-secondary);">Size:</span>
+      <input type="range" id="sizeRange" min="2" max="20" value="6" style="width:70px;">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:13px;color:var(--color-text-secondary);">Smooth:</span>
+      <input type="range" id="smoothRange" min="1" max="12" value="6" style="width:70px;">
+      <span id="smoothVal" style="font-size:13px;font-weight:500;min-width:16px;">6</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div id="statusDot" style="width:10px;height:10px;border-radius:50%;background:#ccc;flex-shrink:0;"></div>
+    <span id="statusText" style="font-size:13px;color:var(--color-text-secondary);">Camera off — click Start Camera</span>
+    <div style="margin-left:auto;display:flex;gap:12px;">
+      <span id="gesture1" style="font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);">Hand 1 —</span>
+      <span id="gesture2" style="font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);">Hand 2 —</span>
+    </div>
+  </div>
+
+  <div style="position:relative;width:100%;aspect-ratio:16/9;background:#0a0a0a;border-radius:var(--border-radius-lg);overflow:hidden;border:0.5px solid var(--color-border-tertiary);">
+    <video id="video" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:0.35;" autoplay playsinline muted></video>
+    <canvas id="drawCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+    <canvas id="handCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+    <div id="overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
+      <span style="font-size:14px;color:#fff;opacity:0.5;">Click Start Camera to begin</span>
+      <span style="font-size:12px;color:#fff;opacity:0.3;">Show both hands for dual drawing</span>
+    </div>
+  </div>
+
+  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 16px;font-size:13px;color:var(--color-text-secondary);display:flex;gap:16px;flex-wrap:wrap;">
+    <span>☝️ Index only = <strong style="color:var(--color-text-primary);">Draw</strong></span>
+    <span>✌️ Two fingers = <strong style="color:var(--color-text-primary);">Pause</strong></span>
+    <span>✊ Fist = <strong style="color:var(--color-text-primary);">Erase</strong></span>
+    <span>Both index tips touching = <strong style="color:var(--color-text-primary);">Clear all</strong></span>
+  </div>
+
+  <div id="aiResult" style="display:none;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 16px;">
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;">AI recognized:</p>
+    <p id="aiText" style="font-size:16px;font-weight:500;margin:0;color:var(--color-text-primary);"></p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<script>
+let stream = null, mpCamera = null, handsModel = null;
+
+const video = document.getElementById('video');
+const drawCanvas = document.getElementById('drawCanvas');
+const handCanvas = document.getElementById('handCanvas');
+const dctx = drawCanvas.getContext('2d');
+const hctx = handCanvas.getContext('2d');
+
+// Per-hand state
+const handState = [
+  { smoothX: null, smoothY: null, lastX: null, lastY: null, buf: [], colorId: 'color1', gestureEl: 'gesture1' },
+  { smoothX: null, smoothY: null, lastX: null, lastY: null, buf: [], colorId: 'color2', gestureEl: 'gesture2' }
+];
+
+const ALPHA = 0.35;
+const MIN_MOVE = 4;
+
+document.getElementById('smoothRange').oninput = function() {
+  document.getElementById('smoothVal').textContent = this.value;
+};
+
+function resizeCanvases() {
+  const w = drawCanvas.parentElement.clientWidth;
+  const h = drawCanvas.parentElement.clientHeight;
+  [drawCanvas, handCanvas].forEach(c => { c.width = w; c.height = h; });
+}
+
+function setStatus(t, dot) {
+  document.getElementById('statusText').textContent = t;
+  document.getElementById('statusDot').style.background = dot;
+}
+
+function setGesture(idx, text, color) {
+  const el = document.getElementById(handState[idx].gestureEl);
+  el.textContent = `Hand ${idx+1} ${text}`;
+  el.style.color = color || 'var(--color-text-secondary)';
+}
+
+function resetHand(idx) {
+  handState[idx].smoothX = null;
+  handState[idx].smoothY = null;
+  handState[idx].lastX = null;
+  handState[idx].lastY = null;
+  handState[idx].buf = [];
+}
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
+    video.srcObject = stream;
+    document.getElementById('overlay').style.display = 'none';
+    resizeCanvases();
+    setStatus('Initializing hand tracking...', '#f59e0b');
+    initMediaPipe();
+  } catch(e) {
+    setStatus('Camera access denied', '#ef4444');
+  }
+}
+
+function initMediaPipe() {
+  handsModel = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+  handsModel.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.75,
+    minTrackingConfidence: 0.75
+  });
+  handsModel.onResults(onResults);
+  mpCamera = new Camera(video, {
+    onFrame: async () => { if (handsModel) await handsModel.send({ image: video }); },
+    width: 640, height: 480
+  });
+  mpCamera.start();
+  setStatus('Ready — show both hands!', '#22c55e');
+  document.getElementById('startBtn').textContent = 'Stop Camera';
+  document.getElementById('startBtn').onclick = stopCamera;
+}
+
+function getFingers(lm) {
+  return [
+    lm[8].y  < lm[6].y,
+    lm[12].y < lm[10].y,
+    lm[16].y < lm[14].y,
+    lm[20].y < lm[18].y
+  ];
+}
+
+function smooth(idx, rawX, rawY) {
+  const s = handState[idx];
+  if (s.smoothX === null) { s.smoothX = rawX; s.smoothY = rawY; }
+  s.smoothX = ALPHA * rawX + (1 - ALPHA) * s.smoothX;
+  s.smoothY = ALPHA * rawY + (1 - ALPHA) * s.smoothY;
+
+  const bufSize = parseInt(document.getElementById('smoothRange').value);
+  s.buf.push({ x: s.smoothX, y: s.smoothY });
+  if (s.buf.length > bufSize) s.buf.shift();
+
+  const ax = s.buf.reduce((a,p)=>a+p.x,0)/s.buf.length;
+  const ay = s.buf.reduce((a,p)=>a+p.y,0)/s.buf.length;
+  return { x: ax, y: ay };
+}
+
+function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
+
+function drawStroke(idx, x, y) {
+  const s = handState[idx];
+  const color = document.getElementById(handState[idx].colorId).value;
+  const baseSize = parseInt(document.getElementById('sizeRange').value);
+
+  if (s.lastX !== null && s.lastY !== null) {
+    const d = dist(s.lastX, s.lastY, x, y);
+    if (d < MIN_MOVE) return;
+    const speed = Math.min(d, 40);
+    const dynSize = Math.max(1, baseSize * (1 - speed/80) + baseSize * 0.5);
+    const cx = (s.lastX + x) / 2;
+    const cy = (s.lastY + y) / 2;
+    dctx.beginPath();
+    dctx.moveTo(s.lastX, s.lastY);
+    dctx.quadraticCurveTo(s.lastX, s.lastY, cx, cy);
+    dctx.strokeStyle = color;
+    dctx.lineWidth = dynSize;
+    dctx.lineCap = 'round';
+    dctx.lineJoin = 'round';
+    dctx.stroke();
+    s.lastX = cx;
+    s.lastY = cy;
+  } else {
+    s.lastX = x;
+    s.lastY = y;
+  }
+}
+
+function drawCursor(x, y, color, mode) {
+  if (mode === 'draw') {
+    hctx.beginPath();
+    hctx.arc(x, y, 10, 0, Math.PI*2);
+    hctx.fillStyle = color + 'cc';
+    hctx.fill();
+    hctx.beginPath();
+    hctx.arc(x, y, 3, 0, Math.PI*2);
+    hctx.fillStyle = '#fff';
+    hctx.fill();
+  } else if (mode === 'pause') {
+    hctx.beginPath();
+    hctx.arc(x, y, 10, 0, Math.PI*2);
+    hctx.fillStyle = 'rgba(255,200,0,0.8)';
+    hctx.fill();
+  } else if (mode === 'erase') {
+    hctx.beginPath();
+    hctx.arc(x, y, 35, 0, Math.PI*2);
+    hctx.strokeStyle = 'rgba(255,80,80,0.8)';
+    hctx.lineWidth = 2;
+    hctx.stroke();
+  }
+}
+
+function onResults(results) {
+  hctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+  const detected = results.multiHandLandmarks?.length || 0;
+
+  // Reset hands that disappeared
+  for (let i = detected; i < 2; i++) {
+    resetHand(i);
+    setGesture(i, '—', 'var(--color-text-secondary)');
+  }
+
+  if (!detected) return;
+
+  // Collect tip positions for both-hands-touch detection
+  const tips = [];
+
+  results.multiHandLandmarks.forEach((lm, idx) => {
+    if (idx > 1) return;
+    const s = handState[idx];
+    const color = document.getElementById(s.colorId).value;
+
+    // Draw skeleton
+    drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.15)', lineWidth: 1 });
+    drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.35)', lineWidth: 1, radius: 2 });
+
+    const rawX = (1 - lm[8].x) * handCanvas.width;
+    const rawY = lm[8].y * handCanvas.height;
+    tips.push({ x: rawX, y: rawY });
+
+    const { x, y } = smooth(idx, rawX, rawY);
+    const [indexUp, middleUp, ringUp, pinkyUp] = getFingers(lm);
+    const allDown = !indexUp && !middleUp && !ringUp && !pinkyUp;
+    const twoUp   = indexUp && middleUp && !ringUp && !pinkyUp;
+    const drawMode = indexUp && !middleUp;
+
+    if (allDown) {
+      setGesture(idx, '✊ Erasing', color);
+      dctx.save();
+      dctx.globalCompositeOperation = 'destination-out';
+      dctx.beginPath();
+      dctx.arc(x, y, 35, 0, Math.PI*2);
+      dctx.fill();
+      dctx.restore();
+      drawCursor(x, y, color, 'erase');
+      s.lastX = null; s.lastY = null;
+    } else if (twoUp) {
+      setGesture(idx, '✌️ Paused', '#f59e0b');
+      drawCursor(x, y, color, 'pause');
+      s.lastX = null; s.lastY = null;
+    } else if (drawMode) {
+      setGesture(idx, '☝️ Drawing', color);
+      drawCursor(x, y, color, 'draw');
+      drawStroke(idx, x, y);
+    } else {
+      setGesture(idx, '— Idle', 'var(--color-text-secondary)');
+      s.lastX = null; s.lastY = null;
+    }
+  });
+
+  // Both index fingers touching = clear canvas
+  if (tips.length === 2 && dist(tips[0].x, tips[0].y, tips[1].x, tips[1].y) < 30) {
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    hctx.fillStyle = 'rgba(255,255,255,0.15)';
+    hctx.font = 'bold 20px sans-serif';
+    hctx.fillText('Cleared!', handCanvas.width/2 - 40, handCanvas.height/2);
+    handState.forEach((_,i) => { handState[i].lastX = null; handState[i].lastY = null; });
+  }
+}
+
+function clearCanvas() {
+  dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  document.getElementById('aiResult').style.display = 'none';
+}
+
+function stopCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (mpCamera) mpCamera.stop();
+  document.getElementById('overlay').style.display = 'flex';
+  setStatus('Camera off', '#ccc');
+  handState.forEach((_,i) => setGesture(i,'—','var(--color-text-secondary)'));
+  document.getElementById('startBtn').textContent = 'Start Camera';
+  document.getElementById('startBtn').onclick = startCamera;
+}
+
+async function recognizeText() {
+  const dataUrl = drawCanvas.toDataURL('image/png');
+  const base64 = dataUrl.split(',')[1];
+  const resultEl = document.getElementById('aiResult');
+  const textEl = document.getElementById('aiText');
+  resultEl.style.display = 'block';
+  textEl.textContent = 'Analyzing...';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
+          { type: 'text', text: 'This is air-drawn handwriting using two hands. Transcribe what is written. If letters or words, tell me exactly what they say. If shapes or drawings, describe them briefly. Be concise.' }
+        ]}]
+      })
+    });
+    const data = await res.json();
+    textEl.textContent = data.content?.[0]?.text || 'Could not recognize';
+  } catch(e) {
+    textEl.textContent = 'Recognition failed';
+  }
+}
+
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+</script>
