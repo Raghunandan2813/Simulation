@@ -163,6 +163,33 @@ function smooth(idx, rawX, rawY) {
   return { x: ax, y: ay };
 }
 
+function getCanvasCoords(landmark) {
+  const vidW = video.videoWidth || 640;
+  const vidH = video.videoHeight || 480;
+  const canW = handCanvas.width;
+  const canH = handCanvas.height;
+  const videoRatio = vidW / vidH;
+  const canvasRatio = canW / canH;
+
+  let renderW, renderH, offsetX, offsetY;
+  if (canvasRatio > videoRatio) {
+    renderW = canW;
+    renderH = canW / videoRatio;
+    offsetX = 0;
+    offsetY = (canH - renderH) / 2;
+  } else {
+    renderH = canH;
+    renderW = canH * videoRatio;
+    offsetX = (canW - renderW) / 2;
+    offsetY = 0;
+  }
+  return {
+    x: (1 - landmark.x) * renderW + offsetX,
+    y: landmark.y * renderH + offsetY,
+    scale: renderW / vidW
+  };
+}
+
 function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
 
 function drawStroke(idx, x, y) {
@@ -238,12 +265,29 @@ function onResults(results) {
     const s = handState[idx];
     const color = document.getElementById(s.colorId).value;
 
-    // Draw skeleton
-    drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.15)', lineWidth: 1 });
-    drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.35)', lineWidth: 1, radius: 2 });
+    // Draw skeleton with proper alignment
+    const vidW = video.videoWidth || 640;
+    const vidH = video.videoHeight || 480;
+    const canW = handCanvas.width;
+    const canH = handCanvas.height;
+    const videoRatio = vidW / vidH;
+    const canvasRatio = canW / canH;
+    let rW, rH, oX, oY;
+    if (canvasRatio > videoRatio) { rW = canW; rH = canW / videoRatio; oX = 0; oY = (canH - rH) / 2; }
+    else { rH = canH; rW = canH * videoRatio; oX = (canW - rW) / 2; oY = 0; }
 
-    const rawX = (1 - lm[8].x) * handCanvas.width;
-    const rawY = lm[8].y * handCanvas.height;
+    hctx.save();
+    // MediaPipe drawing_utils internally multiply by canvas.width/height,
+    // so we adjust our transform to compensate and achieve perfect alignment.
+    hctx.translate(oX + rW, oY);
+    hctx.scale(-rW / canW, rH / canH);
+    drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.4)', lineWidth: 3 });
+    drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.6)', lineWidth: 1, radius: 4 });
+    hctx.restore();
+
+    const mappedTip = getCanvasCoords(lm[8]);
+    const rawX = mappedTip.x;
+    const rawY = mappedTip.y;
     tips.push({ x: rawX, y: rawY });
 
     const { x, y } = smooth(idx, rawX, rawY);
