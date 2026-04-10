@@ -71,12 +71,13 @@ const hctx = handCanvas.getContext('2d');
 
 // Per-hand state
 const handState = [
-  { smoothX: null, smoothY: null, lastX: null, lastY: null, buf: [], colorId: 'color1', gestureEl: 'gesture1' },
-  { smoothX: null, smoothY: null, lastX: null, lastY: null, buf: [], colorId: 'color2', gestureEl: 'gesture2' }
+  { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, colorId: 'color1', gestureEl: 'gesture1' },
+  { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, colorId: 'color2', gestureEl: 'gesture2' }
 ];
 
-const ALPHA = 0.35;
-const MIN_MOVE = 4;
+const MIN_ALPHA = 0.05; // High smoothing for slow moves
+const MAX_ALPHA = 0.5;  // Low smoothing for fast moves
+const MIN_MOVE = 2;     // Increased sensitivity
 
 document.getElementById('smoothRange').oninput = function() {
   document.getElementById('smoothVal').textContent = this.value;
@@ -104,7 +105,8 @@ function resetHand(idx) {
   handState[idx].smoothY = null;
   handState[idx].lastX = null;
   handState[idx].lastY = null;
-  handState[idx].buf = [];
+  handState[idx].rawX = null;
+  handState[idx].rawY = null;
 }
 
 async function startCamera() {
@@ -150,17 +152,34 @@ function getFingers(lm) {
 
 function smooth(idx, rawX, rawY) {
   const s = handState[idx];
-  if (s.smoothX === null) { s.smoothX = rawX; s.smoothY = rawY; }
-  s.smoothX = ALPHA * rawX + (1 - ALPHA) * s.smoothX;
-  s.smoothY = ALPHA * rawY + (1 - ALPHA) * s.smoothY;
+  const intensity = parseInt(document.getElementById('smoothRange').value) / 10;
+  
+  if (s.smoothX === null) { 
+    s.smoothX = rawX; 
+    s.smoothY = rawY; 
+    s.rawX = rawX;
+    s.rawY = rawY;
+    return { x: rawX, y: rawY };
+  }
 
-  const bufSize = parseInt(document.getElementById('smoothRange').value);
-  s.buf.push({ x: s.smoothX, y: s.smoothY });
-  if (s.buf.length > bufSize) s.buf.shift();
+  // Calculate velocity (distance from last raw position)
+  const d = Math.sqrt((rawX - s.rawX)**2 + (rawY - s.rawY)**2);
+  s.rawX = rawX;
+  s.rawY = rawY;
 
-  const ax = s.buf.reduce((a,p)=>a+p.x,0)/s.buf.length;
-  const ay = s.buf.reduce((a,p)=>a+p.y,0)/s.buf.length;
-  return { x: ax, y: ay };
+  // Adaptive Alpha: faster move = larger alpha (less smoothing/lag)
+  // We use the slider to scale the effect
+  const sensitivity = 1 + (1 - intensity) * 2; // Higher intensity = lower sensitivity 
+  let alpha = MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * Math.min(1, d / (30 * sensitivity));
+  
+  // Apply intensity scaling from UI
+  alpha = alpha * (1 / (intensity * 2 + 0.5));
+  alpha = Math.max(0.01, Math.min(0.8, alpha));
+
+  s.smoothX = alpha * rawX + (1 - alpha) * s.smoothX;
+  s.smoothY = alpha * rawY + (1 - alpha) * s.smoothY;
+
+  return { x: s.smoothX, y: s.smoothY };
 }
 
 function getCanvasCoords(landmark) {
