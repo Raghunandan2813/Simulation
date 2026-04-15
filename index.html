@@ -1,396 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirVision - Premium Dual-Hand Drawing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050505;
+            --bg-surface: rgba(20, 20, 25, 0.7);
+            --bg-card: rgba(30, 30, 35, 0.5);
+            --accent-primary: #6366f1;
+            --accent-secondary: #f43f5e;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --radius-xl: 24px;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            --font-main: 'Outfit', sans-serif;
+        }
 
-<div style="display:flex;flex-direction:column;gap:12px;padding:1rem 0;">
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: var(--font-main);
+        }
 
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <button id="startBtn" onclick="startCamera()" style="background:var(--color-background-info);color:var(--color-text-info);border:none;padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;font-weight:500;cursor:pointer;">Start Camera</button>
-    <button onclick="clearCanvas()" style="padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;">Clear</button>
-    <button onclick="recognizeText()" style="padding:8px 18px;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;">Recognize with AI ↗</button>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:13px;color:var(--color-text-secondary);">Hand 1:</span>
-      <input type="color" id="color1" value="#6366f1" style="width:28px;height:28px;border:none;border-radius:50%;cursor:pointer;padding:0;">
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:13px;color:var(--color-text-secondary);">Hand 2:</span>
-      <input type="color" id="color2" value="#f43f5e" style="width:28px;height:28px;border:none;border-radius:50%;cursor:pointer;padding:0;">
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:13px;color:var(--color-text-secondary);">Size:</span>
-      <input type="range" id="sizeRange" min="2" max="20" value="6" style="width:70px;">
-    </div>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <span style="font-size:13px;color:var(--color-text-secondary);">Smooth:</span>
-      <input type="range" id="smoothRange" min="1" max="12" value="6" style="width:70px;">
-      <span id="smoothVal" style="font-size:13px;font-weight:500;min-width:16px;">6</span>
-    </div>
-  </div>
+        body {
+            background: var(--bg-deep);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(244, 63, 94, 0.05) 0%, transparent 50%);
+        }
 
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <div id="statusDot" style="width:10px;height:10px;border-radius:50%;background:#ccc;flex-shrink:0;"></div>
-    <span id="statusText" style="font-size:13px;color:var(--color-text-secondary);">Camera off — click Start Camera</span>
-    <div style="margin-left:auto;display:flex;gap:12px;">
-      <span id="gesture1" style="font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);">Hand 1 —</span>
-      <span id="gesture2" style="font-size:13px;font-weight:500;padding:3px 10px;border-radius:20px;background:var(--color-background-secondary);color:var(--color-text-secondary);">Hand 2 —</span>
-    </div>
-  </div>
+        .navbar {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--glass-border);
+            z-index: 100;
+        }
 
-  <div style="position:relative;width:100%;aspect-ratio:16/9;background:#0a0a0a;border-radius:var(--border-radius-lg);overflow:hidden;border:0.5px solid var(--color-border-tertiary);">
-    <video id="video" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);opacity:0.35;" autoplay playsinline muted></video>
-    <canvas id="drawCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
-    <canvas id="handCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
-    <div id="overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;">
-      <span style="font-size:14px;color:#fff;opacity:0.5;">Click Start Camera to begin</span>
-      <span style="font-size:12px;color:#fff;opacity:0.3;">Show both hands for dual drawing</span>
-    </div>
-  </div>
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, var(--accent-primary) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
 
-  <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 16px;font-size:13px;color:var(--color-text-secondary);display:flex;gap:16px;flex-wrap:wrap;">
-    <span>☝️ Index only = <strong style="color:var(--color-text-primary);">Draw</strong></span>
-    <span>✌️ Two fingers = <strong style="color:var(--color-text-primary);">Pause</strong></span>
-    <span>✊ Fist = <strong style="color:var(--color-text-primary);">Erase</strong></span>
-    <span>Both index tips touching = <strong style="color:var(--color-text-primary);">Clear all</strong></span>
-  </div>
+        .main-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
 
-  <div id="aiResult" style="display:none;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 16px;">
-    <p style="font-size:13px;color:var(--color-text-secondary);margin:0 0 4px;">AI recognized:</p>
-    <p id="aiText" style="font-size:16px;font-weight:500;margin:0;color:var(--color-text-primary);"></p>
-  </div>
-</div>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .glass-card {
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .control-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .label-text {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .value-badge {
+            font-size: 0.75rem;
+            background: var(--bg-card);
+            padding: 2px 8px;
+            border-radius: 6px;
+            color: var(--accent-primary);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-md);
+            border: 1px solid transparent;
+            font-size: 0.938rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-primary);
+            color: white;
+            box-shadow: 0 4px 15px -1px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -2px var(--accent-glow);
+            filter: brightness(1.1);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+        }
+
+        .color-picker-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .color-pill {
+            background: var(--bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="color"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            background: none;
+        }
+
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 2px solid #fff; border-radius: 50%; }
+
+        input[type="range"] {
+            width: 100%;
+            height: 4px;
+            background: var(--bg-card);
+            border-radius: 2px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .viewport-container {
+            position: relative;
+            background: #000;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        video#video {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.3;
+            transition: opacity 1s ease;
+        }
+
+        canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .overlay-ui {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+        }
+
+        .status-badge {
+            align-self: flex-start;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .dot.pulse { background: var(--warning); animation: pulse 2s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        .gesture-pills {
+            margin-top: auto;
+            display: flex;
+            gap: 12px;
+        }
+
+        .pill {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            font-size: 0.813rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .history-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .instruction-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            margin-top: auto;
+        }
+
+        .instruction-item {
+            background: var(--bg-card);
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .instruction-item strong {
+            display: block;
+            font-size: 0.688rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        .instruction-item span {
+            font-size: 0.813rem;
+            color: var(--text-primary);
+        }
+
+        #aiResult {
+            margin-top: 1.5rem;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-container { grid-template-columns: 1fr; }
+            .sidebar { order: 2; display: grid; grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 640px) {
+            .sidebar { grid-template-columns: 1fr; }
+            .main-container { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">AIRVISION</div>
+        <div id="statusBadge" class="status-badge">
+            <div id="statusDot" class="dot"></div>
+            <span id="statusText">Camera off</span>
+        </div>
+    </nav>
+
+    <main class="main-container">
+        <aside class="sidebar">
+            <div class="glass-card">
+                <div class="control-group">
+                    <button id="startBtn" class="btn btn-primary" onclick="startCamera()">
+                        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                        Start Camera
+                    </button>
+                    <div class="history-controls">
+                        <button class="btn btn-secondary" onclick="undo()" id="undoBtn" disabled>Undo</button>
+                        <button class="btn btn-secondary" onclick="redo()" id="redoBtn" disabled>Redo</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-row">
+                        <span class="label-text">Hand Colors</span>
+                    </div>
+                    <div class="color-picker-row">
+                        <div class="color-pill">
+                            <input type="color" id="color1" value="#6366f1" onchange="updateColors()">
+                            <span class="label-text">H-1</span>
+                        </div>
+                        <div class="color-pill">
+                            <input type="color" id="color2" value="#f43f5e" onchange="updateColors()">
+                            <span class="label-text">H-2</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-row">
+                        <span class="label-text">Brush Settings</span>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <div class="label-row">
+                            <span class="label-text" style="font-size: 12px;">Size</span>
+                            <span class="value-badge" id="sizeVal">6px</span>
+                        </div>
+                        <input type="range" id="sizeRange" min="2" max="30" value="6" oninput="document.getElementById('sizeVal').textContent = this.value+'px'">
+                    </div>
+                    <div>
+                        <div class="label-row">
+                            <span class="label-text" style="font-size: 12px;">Smooth</span>
+                            <span class="value-badge" id="smoothVal">6</span>
+                        </div>
+                        <input type="range" id="smoothRange" min="1" max="15" value="6" oninput="document.getElementById('smoothVal').textContent = this.value">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <button class="btn btn-outline" onclick="toggleSkeleton()">
+                        <span id="skeletonBtnText">Hide Skeleton</span>
+                    </button>
+                    <button class="btn btn-outline" style="margin-top: 10px;" onclick="downloadCanvas()">
+                        Save Drawing
+                    </button>
+                </div>
+
+                <button class="btn btn-secondary" style="margin-top: 10px; width: 100%; border-color: var(--danger); color: var(--danger);" onclick="confirmClear()">
+                    Clear Canvas
+                </button>
+            </div>
+
+            <div class="glass-card" style="display: flex; flex-direction: column;">
+                <div class="control-group">
+                    <button class="btn btn-primary" onclick="recognizeText()" style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);">
+                        Recognize with AI
+                    </button>
+                    <div id="aiResult" class="glass-card" style="background: rgba(255,255,255,0.03); margin-top: 1rem; display: none; padding: 12px;">
+                        <span class="label-text" style="display: block; margin-bottom: 4px;">AI Analysis Result:</span>
+                        <p id="aiText" style="font-size: 1rem; color: #fff; line-height: 1.4;"></p>
+                    </div>
+                </div>
+
+                <div class="instruction-grid">
+                    <div class="instruction-item">
+                        <strong>Draw</strong>
+                        <span>☝️ Index Tip</span>
+                    </div>
+                    <div class="instruction-item">
+                        <strong>Pause</strong>
+                        <span>✌️ Two Fingers</span>
+                    </div>
+                    <div class="instruction-item">
+                        <strong>Erase</strong>
+                        <span>✊ Fist Shape</span>
+                    </div>
+                    <div class="instruction-item">
+                        <strong>Clear</strong>
+                        <span>🤝 Tips Touch</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="viewport-container">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="drawCanvas"></canvas>
+            <canvas id="handCanvas"></canvas>
+            
+            <div id="emptyState" style="position: absolute; text-align: center; pointer-events: none;">
+                <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">✨</div>
+                <h2 style="font-size: 1.5rem; font-weight: 500; color: var(--text-secondary);">Ready to Create?</h2>
+                <p style="color: var(--text-muted); font-size: 0.875rem;">Start your camera and use your hands to draw in the air.</p>
+            </div>
+
+            <div class="overlay-ui">
+                <div class="gesture-pills">
+                    <div id="gesturePill1" class="pill" style="opacity: 0;">
+                        <span id="gestureIcon1">✨</span>
+                        <span id="gesture1">Hand 1</span>
+                    </div>
+                    <div id="gesturePill2" class="pill" style="opacity: 0;">
+                        <span id="gestureIcon2">✨</span>
+                        <span id="gesture2">Hand 2</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <script>
-let stream = null, mpCamera = null, handsModel = null;
+    let stream = null, mpCamera = null, handsModel = null;
+    let showSkeleton = true;
 
-const video = document.getElementById('video');
-const drawCanvas = document.getElementById('drawCanvas');
-const handCanvas = document.getElementById('handCanvas');
-const dctx = drawCanvas.getContext('2d');
-const hctx = handCanvas.getContext('2d');
+    const video = document.getElementById('video');
+    const drawCanvas = document.getElementById('drawCanvas');
+    const handCanvas = document.getElementById('handCanvas');
+    const dctx = drawCanvas.getContext('2d', { willReadFrequently: true });
+    const hctx = handCanvas.getContext('2d');
 
-// Per-hand state
-const handState = [
-  { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, colorId: 'color1', gestureEl: 'gesture1' },
-  { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, colorId: 'color2', gestureEl: 'gesture2' }
-];
+    // History System
+    let undoStack = [];
+    let redoStack = [];
+    let currentStroke = []; // Current points for the active stroke
 
-const MIN_ALPHA = 0.05; // High smoothing for slow moves
-const MAX_ALPHA = 0.5;  // Low smoothing for fast moves
-const MIN_MOVE = 2;     // Increased sensitivity
+    const handState = [
+        { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, isDrawing: false },
+        { smoothX: null, smoothY: null, lastX: null, lastY: null, rawX: null, rawY: null, isDrawing: false }
+    ];
 
-document.getElementById('smoothRange').oninput = function() {
-  document.getElementById('smoothVal').textContent = this.value;
-};
+    const GESTURE_ICONS = {
+        'draw': '☝️',
+        'pause': '✌️',
+        'erase': '✊',
+        'clear': '🤝',
+        'idle': '✨'
+    };
 
-function resizeCanvases() {
-  const w = drawCanvas.parentElement.clientWidth;
-  const h = drawCanvas.parentElement.clientHeight;
-  [drawCanvas, handCanvas].forEach(c => { c.width = w; c.height = h; });
-}
-
-function setStatus(t, dot) {
-  document.getElementById('statusText').textContent = t;
-  document.getElementById('statusDot').style.background = dot;
-}
-
-function setGesture(idx, text, color) {
-  const el = document.getElementById(handState[idx].gestureEl);
-  el.textContent = `Hand ${idx+1} ${text}`;
-  el.style.color = color || 'var(--color-text-secondary)';
-}
-
-function resetHand(idx) {
-  handState[idx].smoothX = null;
-  handState[idx].smoothY = null;
-  handState[idx].lastX = null;
-  handState[idx].lastY = null;
-  handState[idx].rawX = null;
-  handState[idx].rawY = null;
-}
-
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
-    video.srcObject = stream;
-    document.getElementById('overlay').style.display = 'none';
-    resizeCanvases();
-    setStatus('Initializing hand tracking...', '#f59e0b');
-    initMediaPipe();
-  } catch(e) {
-    setStatus('Camera access denied', '#ef4444');
-  }
-}
-
-function initMediaPipe() {
-  handsModel = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-  handsModel.setOptions({
-    maxNumHands: 2,
-    modelComplexity: 1,
-    minDetectionConfidence: 0.75,
-    minTrackingConfidence: 0.75
-  });
-  handsModel.onResults(onResults);
-  mpCamera = new Camera(video, {
-    onFrame: async () => { if (handsModel) await handsModel.send({ image: video }); },
-    width: 640, height: 480
-  });
-  mpCamera.start();
-  setStatus('Ready — show both hands!', '#22c55e');
-  document.getElementById('startBtn').textContent = 'Stop Camera';
-  document.getElementById('startBtn').onclick = stopCamera;
-}
-
-function getFingers(lm) {
-  return [
-    lm[8].y  < lm[6].y,
-    lm[12].y < lm[10].y,
-    lm[16].y < lm[14].y,
-    lm[20].y < lm[18].y
-  ];
-}
-
-function smooth(idx, rawX, rawY) {
-  const s = handState[idx];
-  const intensity = parseInt(document.getElementById('smoothRange').value) / 10;
-  
-  if (s.smoothX === null) { 
-    s.smoothX = rawX; 
-    s.smoothY = rawY; 
-    s.rawX = rawX;
-    s.rawY = rawY;
-    return { x: rawX, y: rawY };
-  }
-
-  // Calculate velocity (distance from last raw position)
-  const d = Math.sqrt((rawX - s.rawX)**2 + (rawY - s.rawY)**2);
-  s.rawX = rawX;
-  s.rawY = rawY;
-
-  // Adaptive Alpha: faster move = larger alpha (less smoothing/lag)
-  // We use the slider to scale the effect
-  const sensitivity = 1 + (1 - intensity) * 2; // Higher intensity = lower sensitivity 
-  let alpha = MIN_ALPHA + (MAX_ALPHA - MIN_ALPHA) * Math.min(1, d / (30 * sensitivity));
-  
-  // Apply intensity scaling from UI
-  alpha = alpha * (1 / (intensity * 2 + 0.5));
-  alpha = Math.max(0.01, Math.min(0.8, alpha));
-
-  s.smoothX = alpha * rawX + (1 - alpha) * s.smoothX;
-  s.smoothY = alpha * rawY + (1 - alpha) * s.smoothY;
-
-  return { x: s.smoothX, y: s.smoothY };
-}
-
-function getCanvasCoords(landmark) {
-  const vidW = video.videoWidth || 640;
-  const vidH = video.videoHeight || 480;
-  const canW = handCanvas.width;
-  const canH = handCanvas.height;
-  const videoRatio = vidW / vidH;
-  const canvasRatio = canW / canH;
-
-  let renderW, renderH, offsetX, offsetY;
-  if (canvasRatio > videoRatio) {
-    renderW = canW;
-    renderH = canW / videoRatio;
-    offsetX = 0;
-    offsetY = (canH - renderH) / 2;
-  } else {
-    renderH = canH;
-    renderW = canH * videoRatio;
-    offsetX = (canW - renderW) / 2;
-    offsetY = 0;
-  }
-  return {
-    x: (1 - landmark.x) * renderW + offsetX,
-    y: landmark.y * renderH + offsetY,
-    scale: renderW / vidW
-  };
-}
-
-function dist(x1,y1,x2,y2) { return Math.sqrt((x2-x1)**2+(y2-y1)**2); }
-
-function drawStroke(idx, x, y) {
-  const s = handState[idx];
-  const color = document.getElementById(handState[idx].colorId).value;
-  const baseSize = parseInt(document.getElementById('sizeRange').value);
-
-  if (s.lastX !== null && s.lastY !== null) {
-    const d = dist(s.lastX, s.lastY, x, y);
-    if (d < MIN_MOVE) return;
-    const speed = Math.min(d, 40);
-    const dynSize = Math.max(1, baseSize * (1 - speed/80) + baseSize * 0.5);
-    const cx = (s.lastX + x) / 2;
-    const cy = (s.lastY + y) / 2;
-    dctx.beginPath();
-    dctx.moveTo(s.lastX, s.lastY);
-    dctx.quadraticCurveTo(s.lastX, s.lastY, cx, cy);
-    dctx.strokeStyle = color;
-    dctx.lineWidth = dynSize;
-    dctx.lineCap = 'round';
-    dctx.lineJoin = 'round';
-    dctx.stroke();
-    s.lastX = cx;
-    s.lastY = cy;
-  } else {
-    s.lastX = x;
-    s.lastY = y;
-  }
-}
-
-function drawCursor(x, y, color, mode) {
-  if (mode === 'draw') {
-    hctx.beginPath();
-    hctx.arc(x, y, 10, 0, Math.PI*2);
-    hctx.fillStyle = color + 'cc';
-    hctx.fill();
-    hctx.beginPath();
-    hctx.arc(x, y, 3, 0, Math.PI*2);
-    hctx.fillStyle = '#fff';
-    hctx.fill();
-  } else if (mode === 'pause') {
-    hctx.beginPath();
-    hctx.arc(x, y, 10, 0, Math.PI*2);
-    hctx.fillStyle = 'rgba(255,200,0,0.8)';
-    hctx.fill();
-  } else if (mode === 'erase') {
-    hctx.beginPath();
-    hctx.arc(x, y, 35, 0, Math.PI*2);
-    hctx.strokeStyle = 'rgba(255,80,80,0.8)';
-    hctx.lineWidth = 2;
-    hctx.stroke();
-  }
-}
-
-function onResults(results) {
-  hctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-  const detected = results.multiHandLandmarks?.length || 0;
-
-  // Reset hands that disappeared
-  for (let i = detected; i < 2; i++) {
-    resetHand(i);
-    setGesture(i, '—', 'var(--color-text-secondary)');
-  }
-
-  if (!detected) return;
-
-  // Collect tip positions for both-hands-touch detection
-  const tips = [];
-
-  results.multiHandLandmarks.forEach((lm, idx) => {
-    if (idx > 1) return;
-    const s = handState[idx];
-    const color = document.getElementById(s.colorId).value;
-
-    // Draw skeleton with proper alignment
-    const vidW = video.videoWidth || 640;
-    const vidH = video.videoHeight || 480;
-    const canW = handCanvas.width;
-    const canH = handCanvas.height;
-    const videoRatio = vidW / vidH;
-    const canvasRatio = canW / canH;
-    let rW, rH, oX, oY;
-    if (canvasRatio > videoRatio) { rW = canW; rH = canW / videoRatio; oX = 0; oY = (canH - rH) / 2; }
-    else { rH = canH; rW = canH * videoRatio; oX = (canW - rW) / 2; oY = 0; }
-
-    hctx.save();
-    // MediaPipe drawing_utils internally multiply by canvas.width/height,
-    // so we adjust our transform to compensate and achieve perfect alignment.
-    hctx.translate(oX + rW, oY);
-    hctx.scale(-rW / canW, rH / canH);
-    drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.4)', lineWidth: 3 });
-    drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.6)', lineWidth: 1, radius: 4 });
-    hctx.restore();
-
-    const mappedTip = getCanvasCoords(lm[8]);
-    const rawX = mappedTip.x;
-    const rawY = mappedTip.y;
-    tips.push({ x: rawX, y: rawY });
-
-    const { x, y } = smooth(idx, rawX, rawY);
-    const [indexUp, middleUp, ringUp, pinkyUp] = getFingers(lm);
-    const allDown = !indexUp && !middleUp && !ringUp && !pinkyUp;
-    const twoUp   = indexUp && middleUp && !ringUp && !pinkyUp;
-    const drawMode = indexUp && !middleUp;
-
-    if (allDown) {
-      setGesture(idx, '✊ Erasing', color);
-      dctx.save();
-      dctx.globalCompositeOperation = 'destination-out';
-      dctx.beginPath();
-      dctx.arc(x, y, 35, 0, Math.PI*2);
-      dctx.fill();
-      dctx.restore();
-      drawCursor(x, y, color, 'erase');
-      s.lastX = null; s.lastY = null;
-    } else if (twoUp) {
-      setGesture(idx, '✌️ Paused', '#f59e0b');
-      drawCursor(x, y, color, 'pause');
-      s.lastX = null; s.lastY = null;
-    } else if (drawMode) {
-      setGesture(idx, '☝️ Drawing', color);
-      drawCursor(x, y, color, 'draw');
-      drawStroke(idx, x, y);
-    } else {
-      setGesture(idx, '— Idle', 'var(--color-text-secondary)');
-      s.lastX = null; s.lastY = null;
+    function resizeCanvases() {
+        const rect = drawCanvas.parentElement.getBoundingClientRect();
+        [drawCanvas, handCanvas].forEach(c => {
+            c.width = rect.width;
+            c.height = rect.height;
+        });
+        // Redraw after resize if needed (though air drawing is transient)
+        renderHistory();
     }
-  });
 
-  // Both index fingers touching = clear canvas
-  if (tips.length === 2 && dist(tips[0].x, tips[0].y, tips[1].x, tips[1].y) < 30) {
-    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-    hctx.fillStyle = 'rgba(255,255,255,0.15)';
-    hctx.font = 'bold 20px sans-serif';
-    hctx.fillText('Cleared!', handCanvas.width/2 - 40, handCanvas.height/2);
-    handState.forEach((_,i) => { handState[i].lastX = null; handState[i].lastY = null; });
-  }
-}
+    function saveState() {
+        undoStack.push(drawCanvas.toDataURL());
+        if (undoStack.length > 50) undoStack.shift();
+        redoStack = [];
+        updateUndoRedoButtons();
+    }
 
-function clearCanvas() {
-  dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-  document.getElementById('aiResult').style.display = 'none';
-}
+    function undo() {
+        if (undoStack.length === 0) return;
+        redoStack.push(drawCanvas.toDataURL());
+        const imgData = undoStack.pop();
+        restoreCanvas(imgData || null);
+        updateUndoRedoButtons();
+    }
 
-function stopCamera() {
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  if (mpCamera) mpCamera.stop();
-  document.getElementById('overlay').style.display = 'flex';
-  setStatus('Camera off', '#ccc');
-  handState.forEach((_,i) => setGesture(i,'—','var(--color-text-secondary)'));
-  document.getElementById('startBtn').textContent = 'Start Camera';
-  document.getElementById('startBtn').onclick = startCamera;
-}
+    function redo() {
+        if (redoStack.length === 0) return;
+        undoStack.push(drawCanvas.toDataURL());
+        const imgData = redoStack.pop();
+        restoreCanvas(imgData);
+        updateUndoRedoButtons();
+    }
 
-async function recognizeText() {
-  const dataUrl = drawCanvas.toDataURL('image/png');
-  const base64 = dataUrl.split(',')[1];
-  const resultEl = document.getElementById('aiResult');
-  const textEl = document.getElementById('aiText');
-  resultEl.style.display = 'block';
-  textEl.textContent = 'Analyzing...';
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
-          { type: 'text', text: 'This is air-drawn handwriting using two hands. Transcribe what is written. If letters or words, tell me exactly what they say. If shapes or drawings, describe them briefly. Be concise.' }
-        ]}]
-      })
-    });
-    const data = await res.json();
-    textEl.textContent = data.content?.[0]?.text || 'Could not recognize';
-  } catch(e) {
-    textEl.textContent = 'Recognition failed';
-  }
-}
+    function restoreCanvas(dataUrl) {
+        dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        if (dataUrl) {
+            const img = new Image();
+            img.onload = () => dctx.drawImage(img, 0, 0);
+            img.src = dataUrl;
+        }
+    }
 
-window.addEventListener('resize', resizeCanvases);
-resizeCanvases();
+    function updateUndoRedoButtons() {
+        document.getElementById('undoBtn').disabled = undoStack.length === 0;
+        document.getElementById('redoBtn').disabled = redoStack.length === 0;
+    }
+
+    function setStatus(text, type) {
+        const dot = document.getElementById('statusDot');
+        const span = document.getElementById('statusText');
+        span.textContent = text;
+        dot.className = 'dot ' + type; // active, pulse, etc.
+    }
+
+    async function startCamera() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user', width: 1280, height: 720 }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+            video.style.opacity = "0.3";
+            document.getElementById('emptyState').style.display = 'none';
+            resizeCanvases();
+            setStatus('Initializing Intelligence...', 'pulse');
+            initMediaPipe();
+        } catch (e) {
+            setStatus('Access Denied', 'danger');
+            console.error(e);
+        }
+    }
+
+    function initMediaPipe() {
+        handsModel = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+        handsModel.setOptions({
+            maxNumHands: 2,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+        handsModel.onResults(onResults);
+
+        mpCamera = new Camera(video, {
+            onFrame: async () => { if (handsModel) await handsModel.send({ image: video }); },
+            width: 1280, height: 720
+        });
+        mpCamera.start();
+        
+        setStatus('Ready to Create', 'active');
+        const startBtn = document.getElementById('startBtn');
+        startBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Stop Camera`;
+        startBtn.onclick = stopCamera;
+    }
+
+    function stopCamera() {
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        if (mpCamera) mpCamera.stop();
+        video.style.opacity = "0";
+        document.getElementById('emptyState').style.display = 'block';
+        setStatus('Camera Off', '');
+        const startBtn = document.getElementById('startBtn');
+        startBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg> Start Camera`;
+        startBtn.onclick = startCamera;
+        [1, 2].forEach(i => {
+            document.getElementById(`gesturePill${i}`).style.opacity = "0";
+        });
+    }
+
+    function getFingers(lm) {
+        return [
+            lm[8].y < lm[6].y,   // Index
+            lm[12].y < lm[10].y, // Middle
+            lm[16].y < lm[14].y, // Ring
+            lm[20].y < lm[18].y  // Pinky
+        ];
+    }
+
+    function smooth(idx, rawX, rawY) {
+        const s = handState[idx];
+        const intensity = parseInt(document.getElementById('smoothRange').value);
+        const alpha = 1 / (intensity + 1);
+
+        if (s.smoothX === null) {
+            s.smoothX = rawX; s.smoothY = rawY;
+            s.rawX = rawX; s.rawY = rawY;
+            return { x: rawX, y: rawY };
+        }
+
+        s.smoothX = alpha * rawX + (1 - alpha) * s.smoothX;
+        s.smoothY = alpha * rawY + (1 - alpha) * s.smoothY;
+        s.rawX = rawX; s.rawY = rawY;
+
+        return { x: s.smoothX, y: s.smoothY };
+    }
+
+    function getCanvasCoords(landmark) {
+        const vidW = video.videoWidth || 1280;
+        const vidH = video.videoHeight || 720;
+        const canW = drawCanvas.width;
+        const canH = drawCanvas.height;
+        
+        const videoRatio = vidW / vidH;
+        const canvasRatio = canW / canH;
+
+        let rW, rH, oX, oY;
+        if (canvasRatio > videoRatio) {
+            rW = canW; rH = canW / videoRatio;
+            oX = 0; oY = (canH - rH) / 2;
+        } else {
+            rH = canH; rW = canH * videoRatio;
+            oX = (canW - rW) / 2; oY = 0;
+        }
+
+        return {
+            x: (1 - landmark.x) * rW + oX,
+            y: landmark.y * rH + oY
+        };
+    }
+
+    function drawStroke(idx, x, y) {
+        const s = handState[idx];
+        const color = document.getElementById(`color${idx + 1}`).value;
+        const size = parseInt(document.getElementById('sizeRange').value);
+
+        if (!s.isDrawing) {
+            saveState(); // Save state at the start of a new stroke
+            s.isDrawing = true;
+        }
+
+        if (s.lastX !== null && s.lastY !== null) {
+            dctx.beginPath();
+            dctx.moveTo(s.lastX, s.lastY);
+            dctx.lineTo(x, y);
+            dctx.strokeStyle = color;
+            dctx.lineWidth = size;
+            dctx.lineCap = 'round';
+            dctx.lineJoin = 'round';
+            dctx.stroke();
+        }
+        s.lastX = x;
+        s.lastY = y;
+    }
+
+    function erase(x, y) {
+        const size = 50;
+        dctx.save();
+        dctx.globalCompositeOperation = 'destination-out';
+        dctx.beginPath();
+        dctx.arc(x, y, size, 0, Math.PI * 2);
+        dctx.fill();
+        dctx.restore();
+    }
+
+    function updatePill(idx, mode, visible) {
+        const pill = document.getElementById(`gesturePill${idx + 1}`);
+        const icon = document.getElementById(`gestureIcon${idx + 1}`);
+        const text = document.getElementById(`gesture${idx + 1}`);
+        
+        pill.style.opacity = visible ? "1" : "0";
+        if (visible) {
+            icon.textContent = GESTURE_ICONS[mode] || '✨';
+            text.textContent = `Hand ${idx + 1}: ${mode.toUpperCase()}`;
+        }
+    }
+
+    function onResults(results) {
+        hctx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+        
+        const detected = results.multiHandLandmarks?.length || 0;
+        const tips = [];
+
+        // UI Reset for missing hands
+        for (let i = detected; i < 2; i++) {
+            updatePill(i, 'idle', false);
+            handState[i].smoothX = null;
+            handState[i].smoothY = null;
+            handState[i].lastX = null;
+            handState[i].lastY = null;
+            handState[i].isDrawing = false;
+        }
+
+        if (!detected) return;
+
+        results.multiHandLandmarks.forEach((lm, idx) => {
+            if (idx > 1) return;
+            const s = handState[idx];
+            
+            // Draw Skeleton
+            if (showSkeleton) {
+                const vidW = video.videoWidth || 1280;
+                const vidH = video.videoHeight || 720;
+                const canW = handCanvas.width;
+                const canH = handCanvas.height;
+                const videoRatio = vidW / vidH;
+                const canvasRatio = canW / canH;
+                let rW, rH, oX, oY;
+                if (canvasRatio > videoRatio) { rW = canW; rH = canW / videoRatio; oX = 0; oY = (canH - rH) / 2; }
+                else { rH = canH; rW = canH * videoRatio; oX = (canW - rW) / 2; oY = 0; }
+
+                hctx.save();
+                hctx.translate(oX + rW, oY);
+                hctx.scale(-rW / canW, rH / canH);
+                drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.2)', lineWidth: 2 });
+                drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.4)', lineWidth: 1, radius: 2 });
+                hctx.restore();
+            }
+
+            const { x, y } = smooth(idx, ...Object.values(getCanvasCoords(lm[8])));
+            tips.push({ x, y });
+
+            const [indexUp, middleUp, ringUp, pinkyUp] = getFingers(lm);
+            const isFist = !indexUp && !middleUp && !ringUp && !pinkyUp;
+            const isPause = indexUp && middleUp && !ringUp && !pinkyUp;
+            const isDraw = indexUp && !middleUp;
+
+            if (isFist) {
+                updatePill(idx, 'erase', true);
+                erase(x, y);
+                s.lastX = null; s.lastY = null;
+                s.isDrawing = false;
+            } else if (isPause) {
+                updatePill(idx, 'pause', true);
+                s.lastX = null; s.lastY = null;
+                s.isDrawing = false;
+            } else if (isDraw) {
+                updatePill(idx, 'draw', true);
+                drawStroke(idx, x, y);
+            } else {
+                updatePill(idx, 'idle', true);
+                s.lastX = null; s.lastY = null;
+                s.isDrawing = false;
+            }
+
+            // Draw Cursor
+            hctx.beginPath();
+            hctx.arc(x, y, 8, 0, Math.PI * 2);
+            hctx.fillStyle = document.getElementById(`color${idx+1}`).value;
+            hctx.fill();
+            hctx.strokeStyle = '#fff';
+            hctx.lineWidth = 2;
+            hctx.stroke();
+        });
+
+        // Clear Trigger: Two tips touching
+        if (tips.length === 2) {
+            const d = Math.hypot(tips[0].x - tips[1].x, tips[0].y - tips[1].y);
+            if (d < 30) {
+                confirmClear();
+            }
+        }
+    }
+
+    function confirmClear() {
+        if (undoStack.length > 0) saveState();
+        dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        document.getElementById('aiResult').style.display = 'none';
+    }
+
+    function toggleSkeleton() {
+        showSkeleton = !showSkeleton;
+        document.getElementById('skeletonBtnText').textContent = showSkeleton ? 'Hide Skeleton' : 'Show Skeleton';
+    }
+
+    function downloadCanvas() {
+        const link = document.createElement('a');
+        link.download = `airvision-art-${Date.now()}.png`;
+        link.href = drawCanvas.toDataURL();
+        link.click();
+    }
+
+    async function recognizeText() {
+        const dataUrl = drawCanvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        const resultEl = document.getElementById('aiResult');
+        const textEl = document.getElementById('aiText');
+        
+        resultEl.style.display = 'block';
+        textEl.textContent = 'Transcribing drawing...';
+
+        try {
+            // Note: In a real app, this should go through a proxy/backend to hide keys
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': 'REPLACE_WITH_YOUR_KEY', 'anthropic-version': '2023-06-01' },
+                body: JSON.stringify({
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 500,
+                    messages: [{ role: 'user', content: [
+                        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: base64 } },
+                        { type: 'text', text: 'What is drawn or written here? Be concise.' }
+                    ]}]
+                })
+            });
+            const data = await res.json();
+            textEl.textContent = data.content?.[0]?.text || 'Recognition unavailable without API key.';
+        } catch (e) {
+            textEl.textContent = 'Connection failed. (API Key required for this feature)';
+        }
+    }
+
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
 </script>
+</html>
