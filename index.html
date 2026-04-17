@@ -492,9 +492,9 @@
         </section>
     </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424515/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1640029074/drawing_utils.js"></script>
 
 <script>
     let stream = null, mpCamera = null, handsModel = null;
@@ -531,7 +531,9 @@
             c.height = rect.height;
         });
         // Redraw after resize if needed (though air drawing is transient)
-        renderHistory();
+        if (undoStack.length > 0) {
+            restoreCanvas(undoStack[undoStack.length - 1]);
+        }
     }
 
     function saveState() {
@@ -579,16 +581,18 @@
     }
 
     async function startCamera() {
+        if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+            setStatus('HTTPS Required', 'danger');
+            alert('Hand detection requires a secure context (HTTPS or localhost).');
+            return;
+        }
+
         try {
-            stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: 'user', width: 1280, height: 720 }, 
-                audio: false 
-            });
-            video.srcObject = stream;
-            video.style.opacity = "0.3";
+            // Reset UI and prepare for initialization
             document.getElementById('emptyState').style.display = 'none';
+            video.style.opacity = "0.3";
             resizeCanvases();
-            setStatus('Initializing Intelligence...', 'pulse');
+            setStatus('Initializing AI...', 'pulse');
             initMediaPipe();
         } catch (e) {
             setStatus('Access Denied', 'danger');
@@ -601,21 +605,28 @@
         handsModel.setOptions({
             maxNumHands: 2,
             modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
         });
         handsModel.onResults(onResults);
 
         mpCamera = new Camera(video, {
-            onFrame: async () => { if (handsModel) await handsModel.send({ image: video }); },
-            width: 1280, height: 720
+            onFrame: async () => { 
+                if (handsModel) {
+                    await handsModel.send({ image: video }); 
+                }
+            },
+            width: 640, height: 480
         });
-        mpCamera.start();
-        
-        setStatus('Ready to Create', 'active');
-        const startBtn = document.getElementById('startBtn');
-        startBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Stop Camera`;
-        startBtn.onclick = stopCamera;
+        mpCamera.start().then(() => {
+            setStatus('Ready to Create', 'active');
+            const startBtn = document.getElementById('startBtn');
+            startBtn.innerHTML = `<svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> Stop Camera`;
+            startBtn.onclick = stopCamera;
+        }).catch(err => {
+            setStatus('Camera Error', 'danger');
+            console.error(err);
+        });
     }
 
     function stopCamera() {
@@ -660,10 +671,10 @@
     }
 
     function getCanvasCoords(landmark) {
-        const vidW = video.videoWidth || 1280;
-        const vidH = video.videoHeight || 720;
-        const canW = drawCanvas.width;
-        const canH = drawCanvas.height;
+        const vidW = video.videoWidth || 640;
+        const vidH = video.videoHeight || 480;
+        const canW = drawCanvas.width || 1;
+        const canH = drawCanvas.height || 1;
         
         const videoRatio = vidW / vidH;
         const canvasRatio = canW / canH;
@@ -678,8 +689,8 @@
         }
 
         return {
-            x: (1 - landmark.x) * rW + oX,
-            y: landmark.y * rH + oY
+            x: (1 - (landmark.x || 0)) * rW + oX,
+            y: (landmark.y || 0) * rH + oY
         };
     }
 
@@ -765,9 +776,9 @@
 
                 hctx.save();
                 hctx.translate(oX + rW, oY);
-                hctx.scale(-rW / canW, rH / canH);
-                drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.2)', lineWidth: 2 });
-                drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.4)', lineWidth: 1, radius: 2 });
+                hctx.scale(-rW, rH); // Correct scale: map 0..1 to rW..rH
+                drawConnectors(hctx, lm, HAND_CONNECTIONS, { color: 'rgba(255,255,255,0.2)', lineWidth: 0.002 }); // lineWidth relative to scale
+                drawLandmarks(hctx, lm, { color: 'rgba(255,255,255,0.4)', lineWidth: 0.001, radius: 0.002 });
                 hctx.restore();
             }
 
